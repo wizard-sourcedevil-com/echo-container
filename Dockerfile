@@ -6,6 +6,9 @@ FROM registry.access.redhat.com/ubi8/ubi-minimal:latest
 # Install bash
 RUN microdnf install bash && microdnf clean all
 
+# Install socat for a simple HTTP server
+RUN microdnf install socat && microdnf clean all
+
 # Copy the bash script to the container
 ADD entrypoint.sh /usr/local/bin/entrypoint.sh
 
