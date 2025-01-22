@@ -1,0 +1,98 @@
+* Build, Test, and Deploy Container Image to Quay.io and OpenShift
+
+** Build the Container Image
+   #+BEGIN_SRC sh
+   podman build -t echo-container:latest .
+   #+END_SRC
+
+** Tag the Container Image for Quay.io
+   #+BEGIN_SRC sh
+   podman tag echo-container:latest quay.io/rene_castro/echo:latest
+   #+END_SRC
+
+** Log in to Quay.io
+   #+BEGIN_SRC sh
+   podman login quay.io
+   #+END_SRC
+
+** Push the Container Image to Quay.io
+   #+BEGIN_SRC sh
+   podman push quay.io/rene_castro/echo:latest
+   #+END_SRC
+
+** Update OpenShift Deployment
+   #+BEGIN_SRC sh
+   oc login <your-openshift-cluster-url>
+   oc set image deployment/echo-app echo-app=quay.io/rene_castro/echo:latest --record
+   oc rollout restart deployment/echo-app
+   oc rollout status deployment/echo-app
+   #+END_SRC
+
+** Expose the Service
+   #+BEGIN_SRC sh
+   oc expose deployment echo-app --port=8080 --target-port=8080
+   #+END_SRC
+
+** Create and Apply Ingress Resource
+   Create a file named ingress.yaml with the following content:
+   #+BEGIN_SRC yaml
+   apiVersion: networking.k8s.io/v1
+   kind: Ingress
+   metadata:
+     annotations:
+       haproxy.router.openshift.io/rewrite-target: /
+     name: echo-app-ingress
+     namespace: green
+   spec:
+     ingressClassName: openshift-default
+     rules:
+     - host: <your-domain>
+       http:
+         paths:
+         - backend:
+             service:
+               name: echo-app
+               port:
+                 number: 8080
+           path: /echo-app
+           pathType: Prefix
+   #+END_SRC
+
+   Apply the Ingress resource:
+   #+BEGIN_SRC sh
+   oc apply -f ingress.yaml
+   oc get ingress
+   #+END_SRC
+
+** Test the Running Container
+   #+BEGIN_SRC sh
+   curl http://localhost:8080
+   #+END_SRC
+
+* entrypoint.sh Script
+   #+BEGIN_SRC bash
+   # filepath: /c:/Short/sourcedevil/rinzler/others/echo-container/entrypoint.sh
+   #!/bin/bash
+
+   # Variable to store the last request details
+   LAST_REQUEST="No requests received yet."
+
+   # Function to handle HTTP requests
+   handle_request() {
+     REQUEST_DETAILS="Path: $REQUEST_URI\nHeaders:\n$(env)"
+     echo -e "HTTP/1.1 200 OK\n\nHello World\n\n$REQUEST_DETAILS"
+     echo -e "Request received:\n$REQUEST_DETAILS" >&2
+     LAST_REQUEST=$REQUEST_DETAILS
+   }
+
+   # Start the HTTP server in the background
+   socat TCP-LISTEN:8080,reuseaddr,fork SYSTEM:'handle_request' &
+
+   # Read the environment variable
+   # infinite loop the ECHO_NAMESPACE environment variable
+   while true; do
+     echo "ECHO_NAMESPACE AND HTTP: $ECHO_NAMESPACE"
+     echo -e "Last request details:\n$LAST_REQUEST"
+     sleep 25
+   done
+   #+END_SRC
