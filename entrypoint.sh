@@ -1,4 +1,7 @@
 #!/bin/bash
-
 # Read the environment variable
-echo "This is the $ECHO_NAMESPACE namespace"
+# inifite loop the ECHO_NAMESPACE environment variable
+while true; do
+  echo "ECHO_NAMESPACE: $ECHO_NAMESPACE"
+  sleep 5
+done
