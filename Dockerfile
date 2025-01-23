@@ -1,13 +1,14 @@
 # Use a Red Hat UBI-based Go image for building
 FROM registry.access.redhat.com/ubi8/go-toolset:1.19 as builder
 
+# Switch to root to avoid write permission issues
+USER 0
+
 # Set the working directory
 WORKDIR /app
 
-# Copy the Go module files
+# Copy Go module and source files
 COPY go.mod .
-
-# Copy the Go application
 COPY main.go .
 
 # Build the Go application
