@@ -1,19 +1,26 @@
-# Use an official lightweight base image
-# from ubi base image
-# https://catalog.redhat.com/software/containers/ubi8/ubi-minimal/5c359b7bbed8bd75a3b1b1b6?container-tabs=overview
+# Use a Red Hat UBI-based Go image for building
+FROM registry.access.redhat.com/ubi8/go-toolset:1.19 as builder
+
+# Set the working directory
+WORKDIR /app
+
+# Copy the Go module files
+COPY go.mod .
+
+# Copy the Go application
+COPY main.go .
+
+# Build the Go application
+RUN go build -o main .
+
+# Use a minimal Red Hat UBI base image
 FROM registry.access.redhat.com/ubi8/ubi-minimal:latest
 
-# Install bash
-RUN microdnf install bash && microdnf clean all
+# Set the working directory
+WORKDIR /root/
 
-# Install socat for a simple HTTP server
-RUN microdnf install socat && microdnf clean all
+# Copy the built Go application from the builder
+COPY --from=builder /app/main .
 
-# Copy the bash script to the container
-ADD entrypoint.sh /usr/local/bin/entrypoint.sh
-
-# Make the script executable
-RUN chmod +x /usr/local/bin/entrypoint.sh
-
-# Set the entrypoint to the script
-ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+# Set the entrypoint to the Go application
+ENTRYPOINT ["./main"]
