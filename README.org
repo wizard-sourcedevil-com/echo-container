@@ -20,12 +20,33 @@
    podman push quay.io/rene_castro/echo:latest
    #+END_SRC
 
-** Update OpenShift Deployment
+** Update ImageStream to Reference the Latest Image
+   Ensure the OpenShift ImageStream is updated to use the latest image. This is necessary if the deployment is triggered by an ImageStream.
+
+   Update the ImageStream with the latest tag:
    #+BEGIN_SRC sh
-   oc login <your-openshift-cluster-url>
-   oc set image deployment/echo-app echo-app=quay.io/rene_castro/echo:latest --record
-   oc rollout restart deployment/echo-app
-   oc rollout status deployment/echo-app
+   oc tag quay.io/rene_castro/echo:latest echo-app:latest -n green
+   #+END_SRC
+
+   Verify the ImageStream:
+   #+BEGIN_SRC sh
+   oc describe imagestream echo-app -n green
+   #+END_SRC
+
+** Update OpenShift Deployment
+   If the deployment doesn’t automatically update after updating the ImageStream, manually update the image and restart the deployment:
+
+   #+BEGIN_SRC sh
+   oc set image deployment/echo-app echo-app=quay.io/rene_castro/echo:latest --record -n green
+   oc rollout restart deployment/echo-app -n green
+   oc rollout status deployment/echo-app -n green
+   #+END_SRC
+
+** Ensure OpenShift Always Pulls the Latest Image
+   To prevent caching issues, configure the deployment to always pull the latest image:
+
+   #+BEGIN_SRC sh
+   oc patch deployment echo-app -p '{"spec":{"template":{"spec":{"containers":[{"name":"echo-app","imagePullPolicy":"Always"}]}}}}' -n green
    #+END_SRC
 
 ** Expose the Service
@@ -34,28 +55,36 @@
    #+END_SRC
 
 ** Create and Apply Ingress Resource
-   Create a file named ingress.yaml with the following content:
+   Use an Ingress resource to route traffic based on paths under the same host.
+
+   Example ingress.yaml:
    #+BEGIN_SRC yaml
    apiVersion: networking.k8s.io/v1
    kind: Ingress
    metadata:
      annotations:
-       haproxy.router.openshift.io/rewrite-target: /
-     name: echo-app-ingress
+       nginx.ingress.kubernetes.io/rewrite-target: /
+     name: multi-service-ingress
      namespace: green
    spec:
-     ingressClassName: openshift-default
      rules:
      - host: <your-domain>
        http:
          paths:
-         - backend:
+         - path: /echo
+           pathType: Prefix
+           backend:
              service:
                name: echo-app
                port:
                  number: 8080
-           path: /echo-app
+         - path: /another
            pathType: Prefix
+           backend:
+             service:
+               name: another-service
+               port:
+                 number: 8080
    #+END_SRC
 
    Apply the Ingress resource:
@@ -66,7 +95,8 @@
 
 ** Test the Running Container
    #+BEGIN_SRC sh
-   curl http://localhost:8080
+   curl http://<your-domain>/echo
+   curl http://<your-domain>/another
    #+END_SRC
 
 * entrypoint.sh Script
@@ -89,7 +119,7 @@
    socat TCP-LISTEN:8080,reuseaddr,fork SYSTEM:'handle_request' &
 
    # Read the environment variable
-   # infinite loop the ECHO_NAMESPACE environment variable
+   # Infinite loop for the ECHO_NAMESPACE environment variable
    while true; do
      echo "ECHO_NAMESPACE AND HTTP: $ECHO_NAMESPACE"
      echo -e "Last request details:\n$LAST_REQUEST"
